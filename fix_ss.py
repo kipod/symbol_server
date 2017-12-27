@@ -23,7 +23,7 @@ class TFile(object):
     def __init__(self, ctx, line):
         row = line.split(',', 8)
         self.rel_path = row[0].strip("\"")
-        self.origin_path = row[1].strip("\"")
+        self.origin_path = row[1].strip("\"\n")
         _, self.file_name = path.split(self.origin_path)
         def get_archive_name(name):
             """ aaa.exe -> aaa.ex_ """
@@ -58,12 +58,15 @@ class Transaction(object):
         row = line.split(',', 8)
         self.tid = int(row[0])
         self.type = row[1]
-        self.file = row[2]
-        self.date = row[3]
-        self.time = row[4]
-        self.product = row[5].strip("\"")
-        self.version = row[6].strip("\"")
-        self.comment = row[7].strip("\"")
+        if self.type == "add":
+            self.file = row[2]
+            self.date = row[3]
+            self.time = row[4]
+            self.product = row[5].strip("\"")
+            self.version = row[6].strip("\"")
+            self.comment = row[7].strip("\"")
+        else:
+            self.deleted_tid = row[3]
         self.ctx = ctx
         transaction_file_name = "{:010d}".format(self.tid)
         if self.type == "del":
@@ -71,9 +74,14 @@ class Transaction(object):
         self.transaction_file_path = path.join(self.ctx.admin_path, transaction_file_name)
 
     def __str__(self):
-        return "{:010d},{},{},{},{},\"{}\",\"{}\",\"{}\",".format(
-            self.tid, self.type, self.file, self.date, self.time,
-            self.product, self.version, self.comment
+        if self.type == 'add':
+            return "{:010d},{},{},{},{},\"{}\",\"{}\",\"{}\",".format(
+                self.tid, self.type, self.file, self.date, self.time,
+                self.product, self.version, self.comment
+            )
+        else:
+            return "{:010d},{},{}".format(
+                self.tid, self.type, self.deleted_tid
             )
 
     def exists(self):
@@ -95,8 +103,14 @@ def main():
     parser.add_argument('--version', action='version', version='%(prog)s {}'.format(Version.STRING))
     parser.add_argument('--path-to-ss', default=Paths.PATH_TO_SS, help='Path to Microsoft Symbol Server database')
     parser.add_argument('--show-only', action='store_true', help="Show problems. Don't fix")
+    parser.add_argument("--delete-defect-transactions", action='store_true', help="Delete transactions with lack of files")
+    parser.add_argument("--fix-server", help="Path to new server.txt file. Remove bad records")
 
     ctx = parser.parse_args()
+
+    if ctx.delete_defect_transactions and ctx.fix_server:
+        print "Error: can't fix  server.txt if enabled option --delete-defect-transactions"
+        ctx.fix_server = None
 
     if not path.isdir(ctx.path_to_ss):
         print("Error: Wrong path: {}".format(ctx.path_to_ss))
@@ -106,7 +120,7 @@ def main():
     ctx.admin_path = path.join(ctx.path_to_ss, Paths.ADMIN)
     server_txt = path.join(ctx.admin_path, Paths.SERVER)
     history_txt = path.join(ctx.admin_path, Paths.HISTORY)
-    # lastid_txt = path.join(ctx.admin_path, Paths.LAST_TID)
+    lastid_txt = path.join(ctx.admin_path, Paths.LAST_TID)
     if not path.isfile(server_txt):
         print("Error: Wrong DB. Can't open server.txt")
         return
@@ -114,26 +128,42 @@ def main():
         print("Error: Wrong DB. Can't open history.txt")
         return
 
+    last_transaction_id = 0
+    with open(lastid_txt) as lastid_txt_file:
+        last_transaction_id = int(lastid_txt_file.readline())
+
     server = []
-    with open(server_txt, 'r') as file_history:
-        for cnt, line in enumerate(file_history):
+    with open(server_txt, 'r') as file_server:
+        for cnt, line in enumerate(file_server):
             server.append(Transaction(line, ctx))
 
     print("Total transaction in server: {}".format(len(server)))
     last_transaction = server[len(server) - 1].tid
     print("Last transaction: {}".format(last_transaction))
+    need_delete_transactions = []
+    need_remove_server_transactions = []
     for transaction in server:
+        if last_transaction_id == transaction.tid: # ignore last transaction!
+            continue
         if transaction.type == 'add':
             if not transaction.exists():
                 print "Transaction {:010d} defected. Need remove from server.txt".format(transaction.tid)
+                need_remove_server_transactions.append(transaction.tid)
                 continue
-            for file in transaction.files():
-                if not file.exists():
-                    print "Transaction {:010d} defected. A lack of flies. Need delete".format(transaction.tid)
-                    break
+            if ctx.delete_defect_transactions:
+                for file in transaction.files():
+                    if not file.exists():
+                        print "Transaction {:010d} defected. A lack of files. Need delete".format(transaction.tid)
+                        need_delete_transactions.append(transaction.tid)
+                        break
             else:
                 print "Transaction {:010d} is good.".format(transaction.tid)
 
+    if ctx.fix_server:
+        with open(ctx.fix_server, 'w') as server_file:
+            for transaction in server:
+                if transaction.tid not in need_remove_server_transactions:
+                    server_file.write("{0!s}\n".format(transaction))
 
 if __name__ == '__main__':
     main()
