@@ -103,7 +103,8 @@ def main():
     parser.add_argument('--version', action='version', version='%(prog)s {}'.format(Version.STRING))
     parser.add_argument('--path-to-ss', default=Paths.PATH_TO_SS, help='Path to Microsoft Symbol Server database')
     parser.add_argument('--show-only', action='store_true', help="Show problems. Don't fix")
-    parser.add_argument("--delete-defect-transactions", action='store_true', help="Delete transactions with lack of files")
+    parser.add_argument("--delete-defect-transactions", action='store_true',
+                        help="Delete transactions with lack of files")
     parser.add_argument("--fix-server", help="Path to new server.txt file. Remove bad records")
 
     ctx = parser.parse_args()
@@ -113,19 +114,19 @@ def main():
         ctx.fix_server = None
 
     if not path.isdir(ctx.path_to_ss):
-        print("Error: Wrong path: {}".format(ctx.path_to_ss))
+        print "Error: Wrong path: {}".format(ctx.path_to_ss)
         return
 
-    print("Symbol Server: {}".format(ctx.path_to_ss))
+    print "Symbol Server: {}".format(ctx.path_to_ss)
     ctx.admin_path = path.join(ctx.path_to_ss, Paths.ADMIN)
     server_txt = path.join(ctx.admin_path, Paths.SERVER)
     history_txt = path.join(ctx.admin_path, Paths.HISTORY)
     lastid_txt = path.join(ctx.admin_path, Paths.LAST_TID)
     if not path.isfile(server_txt):
-        print("Error: Wrong DB. Can't open server.txt")
+        print "Error: Wrong DB. Can't open server.txt"
         return
     if not path.isfile(history_txt):
-        print("Error: Wrong DB. Can't open history.txt")
+        print "Error: Wrong DB. Can't open history.txt"
         return
 
     last_transaction_id = 0
@@ -134,12 +135,12 @@ def main():
 
     server = []
     with open(server_txt, 'r') as file_server:
-        for cnt, line in enumerate(file_server):
+        for _, line in enumerate(file_server):
             server.append(Transaction(line, ctx))
 
-    print("Total transaction in server: {}".format(len(server)))
+    print "Total transaction in server: {}".format(len(server))
     last_transaction = server[len(server) - 1].tid
-    print("Last transaction: {}".format(last_transaction))
+    print "Last transaction: {}".format(last_transaction)
     need_delete_transactions = []
     need_remove_server_transactions = []
     for transaction in server:
@@ -151,8 +152,8 @@ def main():
                 need_remove_server_transactions.append(transaction.tid)
                 continue
             if ctx.delete_defect_transactions:
-                for file in transaction.files():
-                    if not file.exists():
+                for t_file in transaction.files():
+                    if not t_file.exists():
                         print "Transaction {:010d} defected. A lack of files. Need delete".format(transaction.tid)
                         need_delete_transactions.append(transaction.tid)
                         break
