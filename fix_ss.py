@@ -3,10 +3,12 @@
 """
 import argparse
 from os import path
+import subprocess
+from os import getenv
 
 class Paths(object):
     """ constants """
-    PATH_TO_SS = r'\\corp.wargaming.local\wgdfs\DepartExchange\Symbols'
+    PATH_TO_SS = getenv('SYMBOL_SERVER', r'\\corp.wargaming.local\wgdfs\DepartExchange\Symbols')
     ADMIN = "000Admin"
     HISTORY = "history.txt"
     SERVER = "server.txt"
@@ -102,7 +104,7 @@ def main():
     parser = argparse.ArgumentParser(description="Rescuer MS Symbol Server DB", prog=Version.PRODUCT)
     parser.add_argument('--version', action='version', version='%(prog)s {}'.format(Version.STRING))
     parser.add_argument('--path-to-ss', default=Paths.PATH_TO_SS, help='Path to Microsoft Symbol Server database')
-    parser.add_argument('--show-only', action='store_true', help="Show problems. Don't fix")
+    parser.add_argument('--ignore_last', action='store_true', help="Ignore the last transaction")
     parser.add_argument("--delete-defect-transactions", action='store_true',
                         help="Delete transactions with lack of files")
     parser.add_argument("--fix-server", help="Path to new server.txt file. Remove bad records")
@@ -144,8 +146,9 @@ def main():
     need_delete_transactions = []
     need_remove_server_transactions = []
     for transaction in server:
-        if last_transaction_id == transaction.tid: # ignore last transaction!
-            continue
+        if ctx.ignore_last:
+            if last_transaction_id == transaction.tid: # ignore last transaction!
+                continue
         if transaction.type == 'add':
             if not transaction.exists():
                 print "Transaction {:010d} defected. Need remove from server.txt".format(transaction.tid)
@@ -165,6 +168,16 @@ def main():
             for transaction in server:
                 if transaction.tid not in need_remove_server_transactions:
                     server_file.write("{0!s}\n".format(transaction))
+
+    if ctx.delete_defect_transactions:
+        for tid in need_delete_transactions:
+            # symstore del /i 0000000016 /s %SS_PATH%
+            print "Delete transaction: {:010d}".format(tid)
+            args = ['symstore.exe', 'del', '/i', "{:010d}".format(tid), '/s', ctx.path_to_ss]
+            p = subprocess.Popen(args, stdout=subprocess.PIPE)
+            for line in p.stdout:
+                print ">>{0!s}".format(line)
+
 
 if __name__ == '__main__':
     main()

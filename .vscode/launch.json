@@ -18,12 +18,11 @@
                 "RedirectOutput"
             ],
             "args": [
-                "--show-only",
-                "--fix-server",
-                "D:\\server.txt",
-//                "--delete-defect-transactions"
-                "--path-to-ss",
-                "D:\\myserversymbols"
+//                "--fix-server",
+//                "D:\\server.txt",
+//                "--delete-defect-transactions",
+//                "--path-to-ss",
+//                "D:\\myserversymbols"
             ]
         }
     ]
